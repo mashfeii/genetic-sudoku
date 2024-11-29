@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <fstream>
 #include <iostream>
 #include <numeric>
@@ -32,46 +33,55 @@ chrom read_file();
  * @param initial gene (separate row)
  * @return initial gene
  */
-gen generate_gen(gen& initial);
+gen generate_gen(const gen& initial);
 
 /*
  * @brief Generate undefined parts of the chromosome
  * @param initial chromosome (separate table)
  * @return Initial chromosome
  */
-chrom generate_chromosome(chrom& initial);
+chrom generate_chromosome(const chrom& initial);
 
 /*
  * @brief Generate initial population (set of tables)
  * @param initial sudoku
  * @return vector of initial chromosomes
  * */
-population generate_init_population(int size, chrom& initial);
+population generate_init_population(int size, const chrom& initial);
 
 /*
  * @brief Calculate fitness function value of generated solution
  * @param current solution (chromosome/table)
  * @return fitness function value
  */
-int fitness(chrom& current);
+int fitness(const chrom& current);
 
 /*
  * @brief Uniform-Order crossover (swap elements of two chromosomes)
  * @param initial chromosome
  * @return crossovered chromosome
  */
-chrom crossover(chrom& first, chrom& second);
+std::array<chrom, 2> crossover(chrom& first, chrom& second);
 
 /*
- * @brief Mutation
- * @param initial chromosome
- * @return mutated chromosome
+ * @brief Mutate given chromosome (table)
+ * @param chromosome (table)
  */
-chrom mutate(chrom& initial);
+void mutate(chrom& current);
+
+/*
+ * @brief Generate new population
+ * @param current population
+ * @return new population (next step of solutions)
+ */
+population generate_pool(population& current);
 
 int main() {
   std::ios::sync_with_stdio(false);
   std::cin.tie(nullptr);
+  std::random_device dev;
+  std::mt19937 rng(dev());
+  std::uniform_real_distribution<> select(0.0, 1.0);
 
   chrom initial = read_file();
   population initial_population =
@@ -103,7 +113,7 @@ chrom read_file() {
   return table;
 }
 
-gen generate_gen(gen& initial) {
+gen generate_gen(const gen& initial) {
   // Generate random row of elements
   gen new_gen = {{1, 0}, {2, 0}, {3, 0}, {4, 0}, {5, 0},
                  {6, 0}, {7, 0}, {8, 0}, {9, 0}};
@@ -120,7 +130,7 @@ gen generate_gen(gen& initial) {
   return new_gen;
 }
 
-chrom generate_chromosome(chrom& initial) {
+chrom generate_chromosome(const chrom& initial) {
   chrom new_chrom;
   for (int row = 0; row != GRID_SIZE; ++row) {
     new_chrom.push_back(generate_gen(initial[row]));
@@ -128,7 +138,7 @@ chrom generate_chromosome(chrom& initial) {
   return new_chrom;
 }
 
-population generate_init_population(int size, chrom& initial) {
+population generate_init_population(int size, const chrom& initial) {
   population population;
   for (int i = 0; i != size; ++i) {
     population.push_back(generate_chromosome(initial));
@@ -136,7 +146,7 @@ population generate_init_population(int size, chrom& initial) {
   return population;
 }
 
-int fitness(chrom& current) {
+int fitness(const chrom& current) {
   int total_fit = 0;
 
   // Validate rows and columns
@@ -188,4 +198,48 @@ int fitness(chrom& current) {
   }
 
   return total_fit;
+}
+
+std::array<chrom, 2> crossover(chrom& first, chrom& second) {
+  std::random_device dev;
+  std::mt19937 rng(dev());
+  std::uniform_int_distribution<std::mt19937::result_type> select(0, 1);
+
+  chrom first_child = first;
+  chrom second_child = second;
+  for (int row = 0; row != GRID_SIZE - 1; ++row) {
+    for (int col = 0; col != GRID_SIZE; ++col) {
+      if (select(rng) == 1 && first_child[row][col].second == 0 &&
+          second_child[row][col].second == 0) {
+        std::swap(first_child[row][col], second_child[row][col]);
+      }
+    }
+  }
+  std::array<chrom, 2> children = {first_child, second_child};
+  return children;
+}
+
+void mutate(float rate, chrom& current) {
+  std::random_device dev;
+  std::mt19937 rng(dev());
+  std::uniform_real_distribution<> select(0, 1);
+
+  for (int row = 0; row != GRID_SIZE; ++row) {
+    if (select(rng) < rate) {
+      current[row] = generate_gen(current[row]);
+    }
+  }
+}
+
+population generate_pool(population current) {
+  std::vector<int> fitness_list(current.size());
+  std::transform(current.begin(), current.end(),
+                 std::back_inserter(fitness_list), fitness);
+  std::sort(current.begin(), current.end(), [](const chrom& a, const chrom& b) {
+    return fitness(a) < fitness(b);
+  });
+
+  std::default_random_engine generator;
+  std::discrete_distribution<int> distribution{fitness_list.begin(),
+                                               fitness_list.end()};
 }
